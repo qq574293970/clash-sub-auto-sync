@@ -1,4 +1,4 @@
-name: 自动转换Clash订阅（清洗+转换 双保险）
+name: Auto Convert Clash Subscription
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -9,34 +9,42 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch raw nodes file
+      # 拉取源文件
+      - name: Download Raw Nodes
         run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
 
-      - name: Clean invalid content (keep only valid nodes)
+      # 🎯 核心修复：提取任意位置的节点链接（适配这个源文件）
+      - name: Clean Nodes (Custom for This File)
         run: |
-          grep -E '^(vmess|vless|ss)://' raw.txt > clean.txt
-          echo "✅ Cleaned nodes count: $(wc -l < clean.txt)"
+          # 提取所有包含 vmess/vless/ss 的行 → 提取纯链接 → 去重
+          grep -E '(vmess|vless|ss)://' raw.txt | \
+          grep -oE '(vmess|vless|ss)://[^ ]+' | \
+          sort | uniq > clean.txt
+          # 打印节点数量
+          echo "✅ Valid Nodes: $(wc -l < clean.txt)"
 
-      - name: Install subconverter
+      # 下载转换工具
+      - name: Install Subconverter
         run: |
           wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
           tar zxf subconverter_linux64.tar.gz
 
-      - name: Convert to Clash Meta format
+      # 转换（绝对不卡死）
+      - name: Convert to Clash Meta
         run: |
-          ./subconverter/subconverter --mode convert \
-            --input clean.txt \
-            --output clash.yaml \
-            --target clash-meta \
-            --dedup true
+          timeout 30 ./subconverter/subconverter \
+          --input clean.txt \
+          --output clash.yaml \
+          --target clash-meta
 
-      - name: Commit and push changes
+      # 上传结果
+      - name: Push Update
         run: |
-          git config --global user.name "GitHub Actions"
+          git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           git add clash.yaml
-          git commit -m "Auto update subscription: $(date +'%Y-%m-%d %H:%M')" || echo "No changes to commit"
-          git push origin main
+          git commit -m "Update: $(date)" || exit 0
+          git push
