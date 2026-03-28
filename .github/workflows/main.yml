@@ -1,4 +1,4 @@
-name: Auto Clash Subscription (Fixed 124 Error)
+name: Auto Clash Subscription
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -8,38 +8,37 @@ jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 1. 拉取源文件
-      - name: Download Raw File
-        run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
-
-      # 2. ✅ 复刻v2rayN清洗（已验证100%提取干净）
-      - name: Clean Nodes
+      - name: Download & Clean Nodes
         run: |
-          grep -oE '(vmess|vless|ss)://[^[:space:]]+' raw.txt | sort | uniq > clean.txt
-          echo "✅ 提取节点数：$(wc -l < clean.txt)"
+          curl -sL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
+          grep -oE '(vmess|vless|ss|trojan)://[^[:space:]]+' raw.txt | sort -u > clean.txt
+          echo "✅ 提取节点数: $(wc -l < clean.txt)"
 
-      # 3. 安装转换工具
-      - name: Install Subconverter
+      - name: Setup Subconverter
         run: |
           wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
           tar zxf subconverter_linux64.tar.gz
+          chmod +x subconverter/subconverter
 
-      # 4. 🚫 移除所有超时/复杂参数！最简转换命令（彻底解决124错误）
-      - name: Convert to Clash Meta
+      - name: Convert to Clash
         run: |
-          ./subconverter/subconverter \
-          --input clean.txt \
-          --output clash.yaml \
-          --target clash-meta
+          ./subconverter/subconverter > /dev/null 2>&1 &
+          sleep 3
+          curl -fsSL "http://127.0.0.1:25500/sub?target=clash&url=clean.txt&insert=false" -o clash.yaml
+          if ! grep -q "proxies:" clash.yaml; then
+            echo "❌ 转换失败"
+            exit 1
+          fi
+          echo "✅ 转换成功"
 
-      # 5. 上传更新
-      - name: Push to GitHub
+      - name: Commit & Push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config --global user.name "actions"
-          git config --global user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add clash.yaml
-          git commit -m "Update" || exit 0
-          git push
+          git commit -m "Update: $(date +'%Y-%m-%d %H:%M')" || exit 0
+          git push https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
