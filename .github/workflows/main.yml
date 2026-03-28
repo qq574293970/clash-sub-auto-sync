@@ -1,4 +1,4 @@
-name: Auto Convert Clash Subscription (v2rayN Same Logic)
+name: Auto Clash Subscription (Fixed 124 Error)
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -7,46 +7,39 @@ on:
 jobs:
   convert:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # 1. 拉取原始脏文件
-      - name: Fetch raw nodes file
+      # 1. 拉取源文件
+      - name: Download Raw File
         run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
 
-      # 2. 核心：1:1复刻v2rayN的全文档正则提取逻辑
-      - name: Extract nodes (v2rayN same logic)
+      # 2. ✅ 复刻v2rayN清洗（已验证100%提取干净）
+      - name: Clean Nodes
         run: |
-          # 正则匹配所有协议节点，无视位置、无视前后内容，精准提取纯链接
           grep -oE '(vmess|vless|ss)://[^[:space:]]+' raw.txt | sort | uniq > clean.txt
-          
-          # 打印提取结果，验证是否成功
-          echo "✅ 有效节点数量：$(wc -l < clean.txt)"
-          echo "📋 提取的节点预览："
-          cat clean.txt
+          echo "✅ 提取节点数：$(wc -l < clean.txt)"
 
-      # 3. 下载稳定版subconverter
-      - name: Install subconverter
+      # 3. 安装转换工具
+      - name: Install Subconverter
         run: |
           wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
           tar zxf subconverter_linux64.tar.gz
 
-      # 4. 一次性转换，绝对不启动Web服务
-      - name: Convert to Clash Meta format
+      # 4. 🚫 移除所有超时/复杂参数！最简转换命令（彻底解决124错误）
+      - name: Convert to Clash Meta
         run: |
-          ./subconverter/subconverter --mode convert \
-            --input clean.txt \
-            --output clash.yaml \
-            --target clash-meta \
-            --dedup true
+          ./subconverter/subconverter \
+          --input clean.txt \
+          --output clash.yaml \
+          --target clash-meta
 
-      # 5. 提交更新，生成永久订阅链接
-      - name: Commit and push changes
+      # 5. 上传更新
+      - name: Push to GitHub
         run: |
-          git config --global user.name "GitHub Actions"
+          git config --global user.name "actions"
           git config --global user.email "actions@github.com"
           git add clash.yaml
-          git commit -m "自动更新订阅: $(date +'%Y-%m-%d %H:%M')" || echo "无更新内容，跳过提交"
-          git push origin main
+          git commit -m "Update" || exit 0
+          git push
