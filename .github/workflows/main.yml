@@ -1,56 +1,32 @@
-name: V2Ray订阅清洗转Clash Meta(subconverter版)
+name: V2Ray转Clash Meta (subconverter 官方标准)
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每日自动更新
-  workflow_dispatch:      # 支持手动触发
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - name: 检出仓库
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # ======================
-      # 1. 下载并安装 subconverter (预编译二进制，零报错)
-      # ======================
-      - name: 安装 subconverter
+      # 1. 安装 subconverter（行业标准工具）
+      - name: 安装转换工具
         run: |
-          wget -O subconverter.tar.gz https://github.com/tindy2013/subconverter/releases/latest/download/subconverter_linux64.tar.gz
-          tar -zxvf subconverter.tar.gz
+          wget -O subc.tar.gz https://github.com/tindy2013/subconverter/releases/latest/download/subconverter_linux64.tar.gz
+          tar -zxvf subc.tar.gz
           chmod +x subconverter
 
-      # ======================
-      # 2. 下载 + 解码 V2RayN 订阅 (模拟V2RayN行为)
-      # ======================
-      - name: 下载并Base64解码节点
+      # 2. 直接转换！subconverter 自动解码Base64 + 去重 + 转Meta
+      - name: 生成Clash Meta配置
         run: |
-          curl -fsSL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw_sub.txt
-          base64 -d raw_sub.txt > nodes.txt
+          ./subconverter & sleep 2
+          curl -s "http://127.0.0.1:25500/sub?target=meta&url=https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o clash-meta.yaml
 
-      # ======================
-      # 3. 清洗节点：去空行 + 去重 (网友标准清洗逻辑)
-      # ======================
-      - name: 清洗格式化节点
-        run: |
-          sed -i '/^[[:space:]]*$/d' nodes.txt  # 删除空行
-          awk '!seen[$0]++' nodes.txt > clean_nodes.txt  # 节点去重
-
-      # ======================
-      # 4. 转换为 Clash Meta 配置
-      # ======================
-      - name: 转换生成Clash Meta配置
-        run: |
-          ./subconverter --listen 127.0.0.1:25500 &
-          sleep 2
-          curl -s "http://127.0.0.1:25500/sub?target=meta&url=file://$(pwd)/clean_nodes.txt" -o clash-meta.yaml
-
-      # ======================
-      # 5. 自动提交到仓库
-      # ======================
-      - name: 提交更新配置
+      # 3. 自动提交到仓库
+      - name: 保存更新
         uses: EndBug/add-and-commit@v9
         with:
-          message: Auto update Clash Meta config
+          message: Auto update Clash Meta
           committer_name: GitHub Actions
           committer_email: actions@github.com
