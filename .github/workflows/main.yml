@@ -10,42 +10,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装依赖
+      # 1. 安装依赖（已修正权限问题）
       - name: 安装工具
         run: |
-          apt update -y
-          apt install -y jq sed curl
+          sudo apt update -y
+          sudo apt install -y jq sed curl
           go install github.com/bestnite/sub2clash@latest
 
       # 2. 下载并Base64解码（模拟V2RayN行为）
       - name: 下载并解码节点
         run: |
           curl -fsSL https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt -o raw.txt
-          # Base64 解码，还原成真实节点列表
           base64 -d raw.txt > nodes_raw.txt
 
       # 3. 清洗：去重 + 清理空行
       - name: 去重与格式化
         run: |
-          # 去掉空行
           sed -i '/^$/d' nodes_raw.txt
-          # 去重（保留第一次出现的）
           awk '!seen[$0]++' nodes_raw.txt > nodes_clean.txt
 
-      # 4. 用清洗后的节点生成 sub2clash 配置
+      # 4. 生成 sub2clash 配置
       - name: 生成 sub2clash 配置
         run: |
           echo "
-          proxies:
-            - $(cat nodes_clean.txt | paste -sd ',' - | sed 's/,/\n            - /g')
+          subscriptions:
+            - url: \"file://$(pwd)/nodes_clean.txt\"
           output:
-            path: clash.yaml
+            path: clash-meta.yaml
             format: meta
           rules:
             - MATCH,Proxy
           " > sub2clash.yaml
 
-      # 5. 转换为 Clash Meta
+      # 5. 执行转换
       - name: 执行转换
         run: sub2clash -c sub2clash.yaml
 
