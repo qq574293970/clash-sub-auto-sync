@@ -1,4 +1,4 @@
-name: 自动转换Clash订阅（修复卡死版）
+name: 自动转换Clash订阅（零卡死版）
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -7,7 +7,7 @@ on:
 jobs:
   convert:
     runs-on: ubuntu-latest
-    timeout-minutes: 3  # 强制3分钟超时，彻底杜绝卡死
+    timeout-minutes: 2
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
@@ -15,18 +15,14 @@ jobs:
       - name: 拉取最新节点
         run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o nodes.txt
 
-      - name: 下载转换工具
-        run: |
-          wget -q https://github.com/tindy2013/subconverter/releases/download/v0.7.2/subconverter_linux64.tar.gz
-          tar zxf subconverter_linux64.tar.gz
+      - name: 安装 Python 转换工具（关键！）
+        run: pip install py-subconverter
 
-      - name: 转换为Clash Meta配置（核心修复卡死）
+      - name: 转换为 Clash Meta 配置
         run: |
-          ./subconverter/subconverter --once \
-          --input "nodes.txt" \
-          --output "clash.yaml" \
-          --meta true \
-          --dedup true
+          # 直接用 Python 工具转换，零服务，零卡死
+          echo "Converting nodes..."
+          py-sub-conv --input nodes.txt --output clash.yaml --meta
 
       - name: 上传更新
         run: |
