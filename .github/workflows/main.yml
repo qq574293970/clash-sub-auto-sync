@@ -10,26 +10,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 安装依赖（已修正权限问题）
+      # 1. 安装基础工具
       - name: 安装工具
         run: |
           sudo apt update -y
           sudo apt install -y jq sed curl
-          go install github.com/bestnite/sub2clash@latest
 
-      # 2. 下载并Base64解码（模拟V2RayN行为）
+      # 2. 安装 sub2clash（预编译二进制，修复编译错误）
+      - name: 下载并安装 sub2clash
+        run: |
+          wget -O sub2clash https://github.com/bestnite/sub2clash/releases/download/v1.1.1/sub2clash-linux-amd64
+          chmod +x sub2clash
+          sudo mv sub2clash /usr/local/bin/
+
+      # 3. 下载并Base64解码节点
       - name: 下载并解码节点
         run: |
           curl -fsSL https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt -o raw.txt
           base64 -d raw.txt > nodes_raw.txt
 
-      # 3. 清洗：去重 + 清理空行
+      # 4. 清洗节点：去重 + 清理空行
       - name: 去重与格式化
         run: |
           sed -i '/^$/d' nodes_raw.txt
           awk '!seen[$0]++' nodes_raw.txt > nodes_clean.txt
 
-      # 4. 生成 sub2clash 配置
+      # 5. 生成 sub2clash 配置
       - name: 生成 sub2clash 配置
         run: |
           echo "
@@ -42,11 +48,11 @@ jobs:
             - MATCH,Proxy
           " > sub2clash.yaml
 
-      # 5. 执行转换
+      # 6. 执行转换
       - name: 执行转换
         run: sub2clash -c sub2clash.yaml
 
-      # 6. 提交到仓库
+      # 7. 提交到仓库
       - name: Commit & Push
         uses: EndBug/add-and-commit@v9
         with:
