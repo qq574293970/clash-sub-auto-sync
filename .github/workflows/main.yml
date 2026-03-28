@@ -1,0 +1,38 @@
+name: 自动同步并转换Clash订阅
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # 每15分钟执行一次，与原作者更新频率匹配
+  workflow_dispatch:  # 支持手动触发更新
+jobs:
+  sync-and-convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 拉取原仓库最新节点文件
+        run: |
+          curl -sL https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt -o raw-nodes.txt
+
+      - name: 安装subconverter转换工具
+        run: |
+          wget -q https://github.com/tindy2013/subconverter/releases/latest/download/subconverter_linux64.tar.gz
+          tar -zxf subconverter_linux64.tar.gz
+
+      - name: 转换为Clash Meta格式订阅
+        run: |
+          ./subconverter/subconverter -c ./subconverter/pref.ini \
+            --artifact "clash" \
+            --input "$(pwd)/raw-nodes.txt" \
+            --output "$(pwd)/clash-sub.yaml" \
+            --include "META" \
+            --expand false \
+            --dedup true
+
+      - name: 提交更新到仓库
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git add clash-sub.yaml
+          git commit -m "自动更新订阅: $(date +'%Y-%m-%d %H:%M')" || echo "无更新内容，跳过提交"
+          git push origin main
