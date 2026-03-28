@@ -1,61 +1,56 @@
-name: 清洗V2ray订阅并转Clash Meta
+name: V2Ray订阅清洗转Clash Meta(subconverter版)
 on:
   schedule:
-    - cron: '0 0 * * *'
-  workflow_dispatch:
+    - cron: '0 0 * * *'  # 每日自动更新
+  workflow_dispatch:      # 支持手动触发
 
 jobs:
-  build:
+  convert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 检出仓库
+        uses: actions/checkout@v4
 
-      # 1. 安装基础工具
-      - name: 安装工具
+      # ======================
+      # 1. 下载并安装 subconverter (预编译二进制，零报错)
+      # ======================
+      - name: 安装 subconverter
         run: |
-          sudo apt update -y
-          sudo apt install -y jq sed curl
+          wget -O subconverter.tar.gz https://github.com/tindy2013/subconverter/releases/latest/download/subconverter_linux64.tar.gz
+          tar -zxvf subconverter.tar.gz
+          chmod +x subconverter
 
-      # 2. 安装 sub2clash（预编译二进制，修复编译错误）
-      - name: 下载并安装 sub2clash
+      # ======================
+      # 2. 下载 + 解码 V2RayN 订阅 (模拟V2RayN行为)
+      # ======================
+      - name: 下载并Base64解码节点
         run: |
-          wget -O sub2clash https://github.com/bestnite/sub2clash/releases/download/v1.1.1/sub2clash-linux-amd64
-          chmod +x sub2clash
-          sudo mv sub2clash /usr/local/bin/
+          curl -fsSL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw_sub.txt
+          base64 -d raw_sub.txt > nodes.txt
 
-      # 3. 下载并Base64解码节点
-      - name: 下载并解码节点
+      # ======================
+      # 3. 清洗节点：去空行 + 去重 (网友标准清洗逻辑)
+      # ======================
+      - name: 清洗格式化节点
         run: |
-          curl -fsSL https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt -o raw.txt
-          base64 -d raw.txt > nodes_raw.txt
+          sed -i '/^[[:space:]]*$/d' nodes.txt  # 删除空行
+          awk '!seen[$0]++' nodes.txt > clean_nodes.txt  # 节点去重
 
-      # 4. 清洗节点：去重 + 清理空行
-      - name: 去重与格式化
+      # ======================
+      # 4. 转换为 Clash Meta 配置
+      # ======================
+      - name: 转换生成Clash Meta配置
         run: |
-          sed -i '/^$/d' nodes_raw.txt
-          awk '!seen[$0]++' nodes_raw.txt > nodes_clean.txt
+          ./subconverter --listen 127.0.0.1:25500 &
+          sleep 2
+          curl -s "http://127.0.0.1:25500/sub?target=meta&url=file://$(pwd)/clean_nodes.txt" -o clash-meta.yaml
 
-      # 5. 生成 sub2clash 配置
-      - name: 生成 sub2clash 配置
-        run: |
-          echo "
-          subscriptions:
-            - url: \"file://$(pwd)/nodes_clean.txt\"
-          output:
-            path: clash-meta.yaml
-            format: meta
-          rules:
-            - MATCH,Proxy
-          " > sub2clash.yaml
-
-      # 6. 执行转换
-      - name: 执行转换
-        run: sub2clash -c sub2clash.yaml
-
-      # 7. 提交到仓库
-      - name: Commit & Push
+      # ======================
+      # 5. 自动提交到仓库
+      # ======================
+      - name: 提交更新配置
         uses: EndBug/add-and-commit@v9
         with:
-          message: Auto clean & update clash meta
-          committer_name: Actions
+          message: Auto update Clash Meta config
+          committer_name: GitHub Actions
           committer_email: actions@github.com
