@@ -1,4 +1,4 @@
-name: Auto Clash Subscription (官方生成模式 100%成功)
+name: Auto Clash Subscription (终极无错版)
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -10,56 +10,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 拉取+清洗节点（复刻v2rayN逻辑）
-      - name: Download & Clean Nodes
+      - name: 下载并清洗节点（v2rayN同款逻辑）
         run: |
           curl -sL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
           grep -oE '(vmess|vless|ss|trojan)://[^[:space:]]+' raw.txt | sort -u > clean.txt
           echo "✅ 提取节点数: $(wc -l < clean.txt)"
 
-      # 2. 安装转换工具
-      - name: Setup Subconverter
+      - name: 安装转换工具
         run: |
-          wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
+          wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz 
           tar zxf subconverter_linux64.tar.gz
           chmod +x subconverter/subconverter
 
-      # 3. 🎯 你找到的【官方生成模式】核心代码（完美无错）
-      - name: Convert to Clash (Generate Mode)
+      - name: 转换为Clash配置（官方 -g 生成模式）
         run: |
-          # 创建生成配置文件
-          cat > generate.ini << 'EOF'
-          [test]
+          # 将清洗后的节点用 | 分隔，符合subconverter格式要求
+          NODES=$(cat clean.txt | tr '\n' '|' | sed 's/|$//')
+          
+          # 生成配置文件
+          cat > subconverter/generate.ini << EOF
+          [clash]
           path=clash.yaml
           target=clash-meta
-          url=clean.txt
+          url=${NODES}
           EOF
           
-          # 复制到 subconverter 目录
-          cp generate.ini subconverter/
+          # 执行转换
           cd subconverter
-          
-          # 使用生成模式（-g 参数）官方标准用法
-          ./subconverter -g --artifact "test"
-          
-          # 移回上级目录
+          ./subconverter -g --artifact "clash"
           mv clash.yaml ../
           cd ..
           
-          # 验证转换结果
-          if ! grep -q "proxies:" clash.yaml; then
+          # 校验结果
+          if [ ! -f clash.yaml ] || ! grep -q "proxies:" clash.yaml; then
             echo "❌ 转换失败"
             exit 1
           fi
-          echo "✅ 转换成功"
+          echo "✅ 转换成功！可用节点: $(grep -c 'server:' clash.yaml)"
 
-      # 4. 自动推送更新
-      - name: Commit & Push
+      - name: 上传更新
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add clash.yaml
-          git commit -m "Update: $(date +'%Y-%m-%d %H:%M')" || exit 0
+          git commit -m "自动更新: $(date +'%Y-%m-%d %H:%M')" || exit 0
           git push https://${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
