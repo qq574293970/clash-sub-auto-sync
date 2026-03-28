@@ -10,11 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download & Clean Nodes
+      - name: Download & Clean Nodes (v2rayN Logic)
         run: |
-          curl -sL "https://raw.githubusercontent.com/bin1site/V2rayFree/main/config.txt" -o raw.txt
+          curl -sL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
           grep -oE '(vmess|vless|ss|trojan)://[^[:space:]]+' raw.txt | sort -u > clean.txt
           echo "✅ 提取节点数: $(wc -l < clean.txt)"
+          # 空节点保护
           if [ ! -s clean.txt ]; then
             echo "❌ 无有效节点"
             exit 1
