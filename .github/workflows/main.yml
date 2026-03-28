@@ -1,44 +1,47 @@
-name: 自动同步Clash订阅（彻底修复卡死版）
+name: 自动转换Clash订阅（清洗+转换 双保险）
 on:
   schedule:
     - cron: '*/15 * * * *'
-  workflow_dispatch:
+  workflow_dispatch
 
 jobs:
-  sync-and-convert:
+  convert:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: 拉取原仓库最新节点
-        run: |
-          curl -sL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw-nodes.txt
-          echo "✅ 节点拉取完成，预览："
-          head -10 raw-nodes.txt
+      # 1. 拉取源文件
+      - name: 拉取原始节点
+        run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
 
-      - name: 下载稳定版转换工具
+      # 2. ✅ 核心：清洗文件！只保留有效节点链接（解决卡死根源）
+      - name: 清洗无效内容
+        run: |
+          grep -E '^(vmess|vless|ss)://' raw.txt > clean.txt
+          echo "✅ 清洗完成，有效节点数量：$(wc -l < clean.txt)"
+
+      # 3. 下载转换工具
+      - name: 安装subconverter
         run: |
           wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
-          tar -zxf subconverter_linux64.tar.gz
+          tar zxf subconverter_linux64.tar.gz
 
-      - name: 【核心修复】一次性转换为Clash Meta格式
+      # 4. 转换（用干净文件，绝对不卡死）
+      - name: 转换为Clash Meta
         run: |
-          # 官方标准转换命令，--mode convert 强制一次性转换，绝不启动Web服务
-          ./subconverter/subconverter \
-            --mode convert \
-            --input "$(pwd)/raw-nodes.txt" \
-            --output "$(pwd)/clash-sub.yaml" \
-            --target clash-meta \
-            --dedup true
-          echo "✅ 转换完成，配置预览："
-          head -20 clash-sub.yaml
+          ./subconverter/subconverter --mode convert \
+          --input clean.txt \
+          --output clash.yaml \
+          --target clash-meta \
+          --dedup true
 
-      - name: 提交更新到仓库
+      # 5. 上传结果
+      - name: 保存并推送
         run: |
-          git config --global user.name "GitHub Actions"
+          git config --global user.name "actions"
           git config --global user.email "actions@github.com"
-          git add clash-sub.yaml
-          git commit -m "自动更新订阅: $(date +'%Y-%m-%d %H:%M')" || echo "无更新内容，跳过提交"
-          git push origin main
+          git add clash.yaml
+          git commit -m "更新 $(date)" || exit 0
+          git push
