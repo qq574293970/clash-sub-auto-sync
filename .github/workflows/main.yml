@@ -1,4 +1,4 @@
-name: Auto Clash Subscription (No 255 Error - Final)
+name: Auto Clash Subscription (Working)
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -10,31 +10,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download & Clean Nodes (v2rayN Logic)
+      - name: Download & Clean Nodes
         run: |
-          curl -sL "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
+          curl -sL "https://raw.githubusercontent.com/bin1site/V2rayFree/main/config.txt" -o raw.txt
           grep -oE '(vmess|vless|ss|trojan)://[^[:space:]]+' raw.txt | sort -u > clean.txt
           echo "✅ 提取节点数: $(wc -l < clean.txt)"
-          # 空节点保护
           if [ ! -s clean.txt ]; then
             echo "❌ 无有效节点"
             exit 1
           fi
 
-      - name: Setup Subconverter (MetaCubeX Latest)
+      - name: Setup Subconverter
         run: |
-          wget -q https://github.com/MetaCubeX/subconverter/releases/download/v0.9.2/subconverter_linux64.tar.gz
+          wget -q https://github.com/MetaCubeX/subconverter/releases/download/v0.9.2/subconverter_linux64.tar.gz 
           tar zxf subconverter_linux64.tar.gz
           chmod +x subconverter/subconverter
 
-      - name: Convert to Clash (File Protocol + Generate Mode)
+      - name: Convert to Clash
         run: |
-          # 核心修复：file:// 协议 + 绝对路径
-          cat > subconverter/generate.ini << 'EOF'
+          NODES_B64=$(base64 -w0 clean.txt)
+          DATA_URI="data:text/plain;base64,${NODES_B64}"
+          
+          cat > subconverter/generate.ini << EOF
           [clash]
           path=clash.yaml
-          target=clash-meta
-          url=file:///github/workspace/clean.txt  # GitHub Actions 固定工作目录
+          target=clash
+          url=${DATA_URI}
           EOF
           
           cd subconverter
@@ -42,12 +43,11 @@ jobs:
           mv clash.yaml ../
           cd ..
           
-          # 严格校验
           if [ ! -f clash.yaml ] || ! grep -q "proxies:" clash.yaml; then
             echo "❌ 转换失败"
             exit 1
           fi
-          echo "✅ 转换成功，节点数: $(grep -c 'server:' clash.yaml || echo 'N/A')"
+          echo "✅ 转换成功，proxies 数量: $(grep -c 'name:' clash.yaml || echo '0')"
 
       - name: Commit & Push
         env:
