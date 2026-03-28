@@ -1,4 +1,4 @@
-name: Auto Convert Clash Subscription
+name: Auto Convert Clash Subscription (v2rayN Same Logic)
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -9,42 +9,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 拉取源文件
-      - name: Download Raw Nodes
+      # 1. 拉取原始脏文件
+      - name: Fetch raw nodes file
         run: curl -L "https://raw.githubusercontent.com/bin1site1/V2rayFree/main/config.txt" -o raw.txt
 
-      # 🎯 核心修复：提取任意位置的节点链接（适配这个源文件）
-      - name: Clean Nodes (Custom for This File)
+      # 2. 核心：1:1复刻v2rayN的全文档正则提取逻辑
+      - name: Extract nodes (v2rayN same logic)
         run: |
-          # 提取所有包含 vmess/vless/ss 的行 → 提取纯链接 → 去重
-          grep -E '(vmess|vless|ss)://' raw.txt | \
-          grep -oE '(vmess|vless|ss)://[^ ]+' | \
-          sort | uniq > clean.txt
-          # 打印节点数量
-          echo "✅ Valid Nodes: $(wc -l < clean.txt)"
+          # 正则匹配所有协议节点，无视位置、无视前后内容，精准提取纯链接
+          grep -oE '(vmess|vless|ss)://[^[:space:]]+' raw.txt | sort | uniq > clean.txt
+          
+          # 打印提取结果，验证是否成功
+          echo "✅ 有效节点数量：$(wc -l < clean.txt)"
+          echo "📋 提取的节点预览："
+          cat clean.txt
 
-      # 下载转换工具
-      - name: Install Subconverter
+      # 3. 下载稳定版subconverter
+      - name: Install subconverter
         run: |
           wget -q https://github.com/tindy2013/subconverter/releases/download/v0.9.0/subconverter_linux64.tar.gz
           tar zxf subconverter_linux64.tar.gz
 
-      # 转换（绝对不卡死）
-      - name: Convert to Clash Meta
+      # 4. 一次性转换，绝对不启动Web服务
+      - name: Convert to Clash Meta format
         run: |
-          timeout 30 ./subconverter/subconverter \
-          --input clean.txt \
-          --output clash.yaml \
-          --target clash-meta
+          ./subconverter/subconverter --mode convert \
+            --input clean.txt \
+            --output clash.yaml \
+            --target clash-meta \
+            --dedup true
 
-      # 上传结果
-      - name: Push Update
+      # 5. 提交更新，生成永久订阅链接
+      - name: Commit and push changes
         run: |
-          git config --global user.name "github-actions"
+          git config --global user.name "GitHub Actions"
           git config --global user.email "actions@github.com"
           git add clash.yaml
-          git commit -m "Update: $(date)" || exit 0
-          git push
+          git commit -m "自动更新订阅: $(date +'%Y-%m-%d %H:%M')" || echo "无更新内容，跳过提交"
+          git push origin main
